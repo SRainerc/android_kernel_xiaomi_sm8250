@@ -1108,7 +1108,6 @@ static void tcp_internal_pacing(struct sock *sk, const struct sk_buff *skb)
 #ifndef CONFIG_MPTCP
 static
 #endif
-void tcp_update_skb_after_send(struct tcp_sock *tp, struct sk_buff *skb)
 static bool tcp_pacing_check(const struct sock *sk)
 {
 	return tcp_needs_internal_pacing(sk) &&
