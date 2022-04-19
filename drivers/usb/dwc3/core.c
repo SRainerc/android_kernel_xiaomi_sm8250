@@ -1602,6 +1602,23 @@ skip_clk_reset:
 	dwc3_debugfs_init(dwc);
 	return 0;
 
+err5:
+	dwc3_debugfs_exit(dwc);
+	dwc3_event_buffers_cleanup(dwc);
+
+	usb_phy_shutdown(dwc->usb2_phy);
+	usb_phy_shutdown(dwc->usb3_phy);
+	phy_exit(dwc->usb2_generic_phy);
+	phy_exit(dwc->usb3_generic_phy);
+
+	usb_phy_set_suspend(dwc->usb2_phy, 1);
+	usb_phy_set_suspend(dwc->usb3_phy, 1);
+	phy_power_off(dwc->usb2_generic_phy);
+	phy_power_off(dwc->usb3_generic_phy);
+
+	dwc3_ulpi_exit(dwc);
+err4:
+	dwc3_free_scratch_buffers(dwc);
 err3:
 	dwc3_free_scratch_buffers(dwc);
 err2:
@@ -1626,9 +1643,16 @@ static int dwc3_remove(struct platform_device *pdev)
 {
 	struct dwc3	*dwc = platform_get_drvdata(pdev);
 
-	dwc3_debugfs_exit(dwc);
 	dwc3_gadget_exit(dwc);
 	pm_runtime_allow(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
+
+	dwc3_core_exit_mode(dwc);
+	dwc3_debugfs_exit(dwc);
+
+	dwc3_core_exit(dwc);
+	dwc3_ulpi_exit(dwc);
+
 	pm_runtime_disable(&pdev->dev);
 
 	dwc3_free_event_buffers(dwc);
@@ -1778,7 +1802,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		if (PMSG_IS_AUTO(msg))
 			break;
 
-		ret = dwc3_core_init(dwc);
+		ret = dwc3_core_init_for_resume(dwc);
 		if (ret)
 			return ret;
 
