@@ -139,6 +139,7 @@ kernel/configs/android-*.cfg
 
 # Tech package directories
 #techpack/
+anykernel3/
 
 # Scripts
 scripts/build_dtbo
