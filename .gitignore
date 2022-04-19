@@ -141,6 +141,7 @@ kernel/configs/android-*.cfg
 #techpack/
 anykernel3/
 build.sh
+out/
 
 # Scripts
 scripts/build_dtbo
