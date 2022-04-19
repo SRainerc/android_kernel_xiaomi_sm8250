@@ -88,6 +88,12 @@
 #include "../xiaomi/xiaomi_touch.h"
 #endif
 
+#ifdef GESTURE_MODE
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+#include <linux/input/tp_common.h>
+#endif
+#endif
+
 /**
  * Event handler installer helpers
  */
@@ -148,6 +154,13 @@ static int fts_mode_handler(struct fts_ts_info *info, int force);
 static int fts_set_cur_value(int mode, int value);
 #endif
 extern int power_supply_is_system_supplied(void);
+#ifdef CONFIG_FTS_BOOST
+extern void touch_irq_boost(void);
+#endif
+#ifdef CONFIG_FTS_BOOST
+#define EVENT_INPUT 0x1
+extern void lpm_disable_for_dev(bool on, char event_dev);
+#endif
 #ifdef CONFIG_FTS_POWERSUPPLY_CB
 static int fts_write_charge_status(int status);
 #endif
@@ -180,6 +193,9 @@ void release_all_touches(struct fts_ts_info *info)
 	input_report_key(info->input_dev, BTN_INFO, 0);
 	mi_disp_set_fod_queue_work(0, true);
 	input_sync(info->input_dev);
+#ifdef CONFIG_FTS_BOOST
+	lpm_disable_for_dev(false, EVENT_INPUT);
+#endif
 	info->touch_id = 0;
 	info->touch_skip = 0;
 	info->fod_id = 0;
@@ -507,6 +523,33 @@ static ssize_t fts_feature_enable_show(struct device *dev,
 	return count;
 }
 #else
+
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+static ssize_t double_tap_show(struct kobject *kobj,
+				struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", fts_info->gesture_enabled);
+}
+
+static ssize_t double_tap_store(struct kobject *kobj,
+	struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	int rc, val;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc)
+		return -EINVAL;
+
+	fts_info->gesture_enabled = !!val;
+	schedule_work(&fts_info->switch_mode_work);
+	return count;
+}
+
+static struct tp_common_ops double_tap_ops = {
+	.show = double_tap_show,
+	.store = double_tap_store
+};
+#endif
 
 #ifdef GRIP_MODE
 /**
@@ -4069,6 +4112,9 @@ static void fts_leave_pointer_event_handler(struct fts_ts_info *info,
 		input_report_key(info->input_dev, BTN_TOUCH, touch_condition);
 		if (!touch_condition)
 			input_report_key(info->input_dev, BTN_TOOL_FINGER, 0);
+#ifdef CONFIG_FTS_BOOST
+		lpm_disable_for_dev(false, EVENT_INPUT);
+#endif
 
 		info->fod_pressed = false;
 		input_report_key(info->input_dev, BTN_INFO, 0);
@@ -4754,6 +4800,9 @@ static void fts_ts_sleep_work(struct work_struct *work)
 			logError(1, "%s pm_resume_completion timeout, i2c is closed", tag);
 			pm_relax(info->dev);
 			fts_enableInterrupt();
+#ifdef CONFIG_FTS_BOOST
+			lpm_disable_for_dev(false, EVENT_INPUT);
+#endif
 			return;
 		} else {
 			logError(1, "%s pm_resume_completion be completed, handling irq", tag);
@@ -4808,6 +4857,9 @@ static void fts_ts_sleep_work(struct work_struct *work)
 #endif
 	pm_relax(info->dev);
 	fts_enableInterrupt();
+#ifdef CONFIG_FTS_BOOST
+	lpm_disable_for_dev(false, EVENT_INPUT);
+#endif
 
 	return;
 }
@@ -4831,6 +4883,9 @@ static irqreturn_t fts_event_handler(int irq, void *ts_info)
 	static char pre_id[3];
 	event_dispatch_handler_t event_handler;
 
+#ifdef CONFIG_FTS_BOOST
+	touch_irq_boost();
+#endif
 	if (info->tp_pm_suspend) {
 		logError(1, "%s device in suspend, schedue to work", tag);
 		pm_wakeup_event(info->dev, 0);
@@ -4845,6 +4900,9 @@ static irqreturn_t fts_event_handler(int irq, void *ts_info)
 	if (!fts_secure_filter_interrupt(info)) {
 		return IRQ_HANDLED;
 	}
+#endif
+#ifdef CONFIG_FTS_BOOST
+	lpm_disable_for_dev(true, EVENT_INPUT);
 #endif
 	pm_stay_awake(info->dev);
 #ifdef TOUCH_THP_SUPPORT
@@ -4916,6 +4974,10 @@ end:
 		} else if (!info->touch_id)
 			info->clicktouch_count = info->clicktouch_num;
 	}
+#ifdef CONFIG_FTS_BOOST
+	if (!info->touch_id)
+		lpm_disable_for_dev(false, EVENT_INPUT);
+#endif
 #ifdef FTS_XIAOMI_TOUCHFEATURE
 	wake_up(&info->wait_queue);
 #endif
@@ -6749,6 +6811,9 @@ static void fts_suspend_work(struct work_struct *work)
 	info->sensor_sleep = true;
 	if (info->gesture_enabled || fts_need_enter_lp_mode())
 		fts_enableInterrupt();
+#ifdef CONFIG_FTS_BOOST
+	lpm_disable_for_dev(false, EVENT_INPUT);
+#endif
 	// xiaomi_touch_set_suspend_state(XIAOMI_TOUCH_SUSPEND);
 }
 
@@ -8256,6 +8321,9 @@ static int fts_probe(struct spi_device *client)
 	int retval;
 	int skip_5_1 = 0;
 	u16 bus_type;
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+	int ret;
+#endif
 #if defined(CONFIG_DRM_PANEL) && defined(CONFIG_OF)
 	error = fts_ts_check_panel(dp);
 	if (error < 0)
@@ -8486,6 +8554,12 @@ static int fts_probe(struct spi_device *client)
 	mutex_init(&(info->input_report_mutex));
 #ifdef GESTURE_MODE
 	mutex_init(&gestureMask_mutex);
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+	ret = tp_common_set_double_tap_ops(&double_tap_ops);
+	if (ret < 0)
+		MI_TOUCH_LOGE(1, "%s %s: Failed to create double_tap node err=%d\n",
+			tag, __func__, ret);
+#endif
 #endif
 
 	spin_lock_init(&fts_int);

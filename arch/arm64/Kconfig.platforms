@@ -500,6 +500,28 @@ config BOARD_UMI
 	help
 	  This enables support for Xiaomi MI 10.
 
+config BOARD_XIAOMI_SM7250
+	bool "Xiaomi SM7250 Board"
+	select ARCH_QCOM
+	select ARCH_SM7250
+
+config BOARD_PICASSO
+	bool "Picasso and Picassoin platform"
+	select BOARD_XIAOMI_SM7250
+	help
+	  This enables support for Xiaomi Redmi K30 5G.
+
+config BOARD_VANGOGH
+	bool "Vangogh platform"
+	select BOARD_XIAOMI_SM7250
+	help
+	  This enables support for Xiaomi MI 10 Lite Zoom.
+
+config BOARD_MONET
+	bool "Monet platform"
+	select BOARD_XIAOMI_SM7250
+	help
+	  This enables support for Xiaomi MI 10 Lite.
 
 endif
 endmenu

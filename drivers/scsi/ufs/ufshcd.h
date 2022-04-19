@@ -3,6 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * Authors:
@@ -90,6 +91,29 @@ enum dev_cmd_type {
 	DEV_CMD_TYPE_QUERY		= 0x1,
 };
 
+#define ufs_spin_lock_irqsave(lock, flags)				\
+do {	\
+	if (!oops_in_progress)\
+		spin_lock_irqsave(lock, flags);	\
+} while (0)
+
+#define ufs_spin_unlock_irqrestore(lock, flags)				\
+do {	\
+	if (!oops_in_progress)\
+		spin_unlock_irqrestore(lock, flags);	\
+} while (0)
+
+#define ufs_spin_lock(lock)				\
+do {	\
+	if (!oops_in_progress)\
+		spin_lock(lock);	\
+} while (0)
+
+#define ufs_spin_unlock(lock)				\
+do {	\
+	if (!oops_in_progress)\
+		spin_unlock(lock);	\
+} while (0)
 /**
  * struct uic_command - UIC command structure
  * @command: UIC command
@@ -156,6 +180,14 @@ enum {
 	UFS_ERR_LINKSTARTUP,
 	UFS_ERR_POWER_MODE_CHANGE,
 	UFS_ERR_TASK_ABORT,
+
+	/* MI errors*/
+	UFS_ERR_UIC_CMD,
+	UFS_ERR_DEV_CMD,
+	UFS_ERR_PWR_CTRL,
+	UFS_ERR_RSP_STATUS,
+	UFS_ERR_ERR_HANDLER,
+
 	UFS_ERR_MAX,
 };
 
@@ -232,6 +264,9 @@ struct ufshcd_lrb {
 #endif /* CONFIG_SCSI_UFS_CRYPTO */
 
 	bool req_abort_skip;
+#if defined(CONFIG_UFSFEATURE) && defined(CONFIG_UFSHPB)
+	int hpb_ctx_id;
+#endif
 };
 
 /**
@@ -688,6 +723,9 @@ struct ufs_stats {
 	int q_depth;
 	int err_stats[UFS_ERR_MAX];
 	struct ufshcd_req_stat req_stats[TS_NUM_STATS];
+#if IS_ENABLED(CONFIG_MI_MEMORY_SYSFS)
+	bool req_stats_enabled;
+#endif
 	int query_stats_arr[UPIU_QUERY_OPCODE_MAX][MAX_QUERY_IDN];
 
 #endif
@@ -1124,10 +1162,14 @@ struct ufs_hba {
 	struct keyslot_manager *ksm;
 #endif /* CONFIG_SCSI_UFS_CRYPTO */
 
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
+#if defined(CONFIG_UFSFEATURE) || defined(CONFIG_UFSFEATURE_31)
+       struct ufsf_feature *ufsf;
+#endif
+
+        ANDROID_KABI_RESERVE(1);
+        ANDROID_KABI_RESERVE(2);
+        ANDROID_KABI_RESERVE(3);
+        ANDROID_KABI_RESERVE(4);
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
@@ -1395,6 +1437,14 @@ int ufshcd_query_flag(struct ufs_hba *hba, enum query_opcode opcode,
 int ufshcd_read_string_desc(struct ufs_hba *hba, int desc_index,
 			    u8 *buf, u32 size, bool ascii);
 
+#if defined(CONFIG_UFSFEATURE_31)
+int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
+			enum dev_cmd_type cmd_type, int timeout);
+void ufshcd_hold_all(struct ufs_hba *hba);
+void ufshcd_release_all(struct ufs_hba *hba);
+int ufshcd_issue_tm_cmd(struct ufs_hba *hba, int lun_id, int task_id,
+			u8 tm_function, u8 *tm_response);
+#endif
 int ufshcd_hold(struct ufs_hba *hba, bool async);
 void ufshcd_release(struct ufs_hba *hba, bool no_sched);
 int ufshcd_wait_for_doorbell_clr(struct ufs_hba *hba, u64 wait_timeout_us);
@@ -1410,6 +1460,15 @@ u32 ufshcd_get_local_unipro_ver(struct ufs_hba *hba);
 
 void ufshcd_scsi_block_requests(struct ufs_hba *hba);
 void ufshcd_scsi_unblock_requests(struct ufs_hba *hba);
+#if defined(CONFIG_UFSFEATURE)
+int ufshcd_exec_dev_cmd(struct ufs_hba *hba,
+			enum dev_cmd_type cmd_type, int timeout);
+int ufshcd_hibern8_hold(struct ufs_hba *hba, bool async);
+void ufshcd_hold_all(struct ufs_hba *hba);
+void ufshcd_release_all(struct ufs_hba *hba);
+int ufshcd_comp_scsi_upiu(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
+int ufshcd_map_sg(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
+#endif
 
 /* Wrapper functions for safely calling variant operations */
 static inline const char *ufshcd_get_var_name(struct ufs_hba *hba)

@@ -1678,6 +1678,16 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
 	int ret = 0;
 	cpumask_t allowed_mask;
 
+	/* Don't allow perf-critical threads to have non-perf affinities */
+	if ((p->pc_flags & PC_PRIME_AFFINE) && new_mask != cpu_prime_mask)
+		return -EINVAL;
+
+	if ((p->pc_flags & PC_PERF_AFFINE) && new_mask != cpu_perf_mask)
+		return -EINVAL;
+
+	if ((p->pc_flags & PC_LITTLE_AFFINE) && new_mask != cpu_lp_mask)
+		return -EINVAL;
+
 	rq = task_rq_lock(p, &rf);
 	update_rq_clock(rq);
 
@@ -2869,6 +2879,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->low_latency			= 0;
 #endif
 	INIT_LIST_HEAD(&p->se.group_node);
+
+#ifdef CONFIG_MIGT
+	migt_monitor_init(p);
+#endif
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	p->se.cfs_rq			= NULL;
@@ -6292,6 +6306,34 @@ void show_state_filter(unsigned long state_filter)
 	 */
 	if (!state_filter)
 		debug_show_all_locks();
+}
+
+void show_state_filter_single(unsigned long state_filter)
+{
+	struct task_struct *g, *p;
+
+#if BITS_PER_LONG == 32
+	printk(KERN_INFO
+		"  task                PC stack   pid father\n");
+#else
+	printk(KERN_INFO
+		"  task                        PC stack   pid father\n");
+#endif
+	rcu_read_lock();
+	for_each_process_thread(g, p) {
+		/*
+		 * reset the NMI-timeout, listing all files on a slow
+		 * console might take a lot of time:
+		 * Also, reset softlockup watchdogs on all CPUs, because
+		 * another CPU might be blocked waiting for us to process
+		 * an IPI.
+		 */
+		touch_nmi_watchdog();
+		touch_all_softlockup_watchdogs();
+		if (p->state == state_filter)
+			sched_show_task(p);
+	}
+	rcu_read_unlock();
 }
 
 /**

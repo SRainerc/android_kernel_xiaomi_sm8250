@@ -22,6 +22,7 @@ endif
 
 obj-$(CONFIG_PROC_FS) += proc_namespace.o
 
+obj-$(CONFIG_FS_HPB)		+= hpb_supp.o
 obj-y				+= notify/
 obj-$(CONFIG_EPOLL)		+= eventpoll.o
 obj-y				+= anon_inodes.o
@@ -122,7 +123,11 @@ obj-$(CONFIG_NILFS2_FS)		+= nilfs2/
 obj-$(CONFIG_BEFS_FS)		+= befs/
 obj-$(CONFIG_HOSTFS)		+= hostfs/
 obj-$(CONFIG_CACHEFILES)	+= cachefiles/
-obj-$(CONFIG_DEBUG_FS)		+= debugfs/
+ifeq ($(CONFIG_DEBUG_FS),y)
+obj-y				+= debugfs/
+else
+obj-$(CONFIG_DEBUG_KMEMLEAK)	+= debugfs/
+endif
 obj-$(CONFIG_TRACING)		+= tracefs/
 obj-$(CONFIG_OCFS2_FS)		+= ocfs2/
 obj-$(CONFIG_BTRFS_FS)		+= btrfs/
@@ -132,3 +137,4 @@ obj-y				+= exofs/ # Multiple modules
 obj-$(CONFIG_CEPH_FS)		+= ceph/
 obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
+obj-$(CONFIG_EXFAT_FS)		+= exfat/

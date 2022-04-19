@@ -28,6 +28,7 @@
 #include <linux/mm_types_task.h>
 #include <linux/mm_event.h>
 #include <linux/task_io_accounting.h>
+#include <linux/pkg_stat.h>
 #include <linux/rseq.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
@@ -827,6 +828,7 @@ struct task_struct {
 	atomic_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
+	unsigned int			pc_flags;
 	unsigned int			ptrace;
 
 #ifdef CONFIG_SMP
@@ -1497,6 +1499,14 @@ struct task_struct {
 	/* task is frozen/stopped (used by the cgroup freezer) */
 	ANDROID_KABI_USE(1, unsigned frozen:1);
 
+#ifdef CONFIG_MIGT
+	struct package_runtime_info pkg;
+#endif
+
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
+	struct task_struct		*simple_lmk_next;
+#endif
+
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.
@@ -1701,6 +1711,13 @@ extern struct pid *cad_pid;
 #define PF_MUTEX_TESTER		0x20000000	/* Thread belongs to the rt mutex tester */
 #define PF_FREEZER_SKIP		0x40000000	/* Freezer should not count it as freezable */
 #define PF_SUSPEND_TASK		0x80000000      /* This thread called freeze_processes() and should not be frozen */
+
+/*
+ * Perf critical flags
+ */
+#define PC_LITTLE_AFFINE		0x00000001
+#define PC_PERF_AFFINE			0x00000002
+#define PC_PRIME_AFFINE		0x00000004
 
 /*
  * Only the _current_ task can read/write to tsk->flags, but other

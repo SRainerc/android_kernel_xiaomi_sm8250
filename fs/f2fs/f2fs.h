@@ -27,6 +27,10 @@
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
 
+#ifdef CONFIG_FS_HPB
+#include <linux/fs_hpb.h>
+#endif
+
 #ifdef CONFIG_F2FS_CHECK_FS
 #define f2fs_bug_on(sbi, condition)	BUG_ON(condition)
 #else
@@ -783,6 +787,9 @@ enum {
 	FI_VERITY_IN_PROGRESS,	/* building fs-verity Merkle tree */
 	FI_COMPRESSED_FILE,	/* indicate file's data can be compressed */
 	FI_MMAP_FILE,		/* indicate file was mmapped */
+#ifdef CONFIG_FS_HPB
+	FI_HPB_INODE,		/* HPB */
+#endif
 	FI_MAX,			/* max flag, never be used */
 };
 
@@ -822,6 +829,7 @@ struct f2fs_inode_info {
 	struct task_struct *inmem_task;	/* store inmemory task */
 	struct mutex inmem_lock;	/* lock for inmemory pages */
 	struct extent_tree *extent_tree;	/* cached extent_tree entry */
+	struct list_head xattr_dirty_list;	/* list for xattr changed inodes */
 
 	/* avoid racing between foreground op and gc */
 	struct rw_semaphore i_gc_rwsem[2];
@@ -1469,6 +1477,8 @@ struct f2fs_sb_info {
 	struct list_head fsync_node_list;	/* node list head */
 	unsigned int fsync_seg_id;		/* sequence id */
 	unsigned int fsync_node_num;		/* number of node entries */
+	spinlock_t xattr_set_dir_ilist_lock;	/* lock for dir inode list*/
+	struct list_head xattr_set_dir_ilist;	/* xattr changed dir inode list */
 
 	/* for orphan inode, use 0'th array */
 	unsigned int max_orphans;		/* max orphan inodes */
@@ -3814,6 +3824,14 @@ int f2fs_read_inline_dir(struct file *file, struct dir_context *ctx,
 int f2fs_inline_data_fiemap(struct inode *inode,
 			struct fiemap_extent_info *fieinfo,
 			__u64 start, __u64 len);
+
+/*
+ * xattr.c
+ */
+void f2fs_inode_xattr_set(struct inode *inode);
+void f2fs_remove_xattr_set_inode(struct inode *inode);
+void f2fs_clear_xattr_set_ilist(struct f2fs_sb_info *sbi);
+int f2fs_parent_inode_xattr_set(struct inode *inode);
 
 /*
  * shrinker.c

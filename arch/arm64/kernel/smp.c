@@ -821,12 +821,10 @@ void arch_send_call_function_single_ipi(int cpu)
 	smp_cross_call_common(cpumask_of(cpu), IPI_CALL_FUNC);
 }
 
-#ifdef CONFIG_ARM64_ACPI_PARKING_PROTOCOL
 void arch_send_wakeup_ipi_mask(const struct cpumask *mask)
 {
 	smp_cross_call_common(mask, IPI_WAKEUP);
 }
-#endif
 
 #ifdef CONFIG_IRQ_WORK
 void arch_irq_work_raise(void)
@@ -844,10 +842,11 @@ DEFINE_PER_CPU(struct pt_regs, regs_before_stop);
 /*
  * ipi_cpu_stop - handle IPI from smp_send_stop()
  */
+extern in_long_press;
 static void ipi_cpu_stop(unsigned int cpu, struct pt_regs *regs)
 {
-	if (system_state == SYSTEM_BOOTING ||
-	    system_state == SYSTEM_RUNNING) {
+	if ((system_state == SYSTEM_BOOTING ||
+	     system_state == SYSTEM_RUNNING) && (!in_long_press)) {
 		per_cpu(regs_before_stop, cpu) = *regs;
 		raw_spin_lock(&stop_lock);
 		pr_crit("CPU%u: stopping\n", cpu);
@@ -946,13 +945,8 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 		break;
 #endif
 
-#ifdef CONFIG_ARM64_ACPI_PARKING_PROTOCOL
 	case IPI_WAKEUP:
-		WARN_ONCE(!acpi_parking_protocol_valid(cpu),
-			  "CPU%u: Wake-up IPI outside the ACPI parking protocol\n",
-			  cpu);
 		break;
-#endif
 
 	default:
 		pr_crit("CPU%u: Unknown IPI message 0x%x\n", cpu, ipinr);
